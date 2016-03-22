@@ -78,7 +78,7 @@ inline Matrix<T>::Matrix(const Matrix<T>& other)
 template <typename T>
 inline Matrix<T>::~Matrix()
 {
-    delete data_;
+    delete[] data_;
     data_ = NULL;
 }
 
