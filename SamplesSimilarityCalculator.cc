@@ -24,14 +24,14 @@ Matrix<double> SamplesSimilarityCalculator::compute_samples_similarity(const Mat
     const size_t num_genes = matrix.nrow();
     const size_t num_samples = matrix.ncol();
 
-    //Matrix<unsigned long> samples_genes_union(num_samples, num_samples);
-    Matrix<unsigned long> samples_genes_intersection(num_samples, num_samples);
-    Matrix<unsigned long> samples_genes_union(num_samples, num_samples);
+    //Matrix<unsigned long> total_count_union(num_samples, num_samples);
+    Matrix<unsigned long> total_count_intersection(num_samples, num_samples);
+    Matrix<unsigned long> total_count_union(num_samples, num_samples);
 
     #pragma omp parallel num_threads(num_threads)
     {
-        Matrix<unsigned long> private_samples_genes_union(samples_genes_union);
-        Matrix<unsigned long> private_samples_genes_intersection(samples_genes_intersection);
+        Matrix<unsigned long> private_count_intersection(num_samples, num_samples);
+        Matrix<unsigned long> private_count_union(num_samples, num_samples);
 
         #pragma omp for nowait
         for (size_t curr_gene = 0; curr_gene < num_genes; ++curr_gene)
@@ -40,11 +40,14 @@ Matrix<double> SamplesSimilarityCalculator::compute_samples_similarity(const Mat
             {
                 for (size_t curr_sample2 = curr_sample1 + 1; curr_sample2 < num_samples; ++curr_sample2)
                 {
-                    private_samples_genes_intersection(curr_sample1, curr_sample2) +=
-                        !!(matrix(curr_gene,curr_sample1) & matrix(curr_gene,curr_sample2));
+                    private_count_union(curr_sample1, curr_sample2) +=
+                        matrix(curr_gene,curr_sample1) + matrix(curr_gene,curr_sample2);
 
-                    private_samples_genes_union(curr_sample1, curr_sample2) +=
-                        !!(matrix(curr_gene,curr_sample1) | matrix(curr_gene,curr_sample2));
+                    if ((matrix(curr_gene,curr_sample1) != 0) && (matrix(curr_gene,curr_sample2) !=0))
+                    {
+                        private_count_intersection(curr_sample1, curr_sample2) +=
+                            matrix(curr_gene,curr_sample1) + matrix(curr_gene,curr_sample2);
+                    }
                 }
             }
         }
@@ -55,12 +58,12 @@ Matrix<double> SamplesSimilarityCalculator::compute_samples_similarity(const Mat
             for (size_t curr_sample2 = curr_sample1 + 1; curr_sample2 < num_samples; ++curr_sample2)
             {
                 #pragma omp atomic
-                samples_genes_intersection(curr_sample1, curr_sample2) +=
-                    private_samples_genes_intersection(curr_sample1, curr_sample2);
+                total_count_intersection(curr_sample1, curr_sample2) +=
+                    private_count_intersection(curr_sample1, curr_sample2);
 
                 #pragma omp atomic
-                samples_genes_union(curr_sample1, curr_sample2) +=
-                    private_samples_genes_union(curr_sample1, curr_sample2);
+                total_count_union(curr_sample1, curr_sample2) +=
+                    private_count_union(curr_sample1, curr_sample2);
             }
         }
     }
@@ -73,8 +76,8 @@ Matrix<double> SamplesSimilarityCalculator::compute_samples_similarity(const Mat
         for (size_t curr_sample2 = curr_sample1 + 1; curr_sample2 < num_samples; ++curr_sample2)
         {
             samples_similarity(curr_sample1, curr_sample2) =
-                static_cast<double>(samples_genes_intersection(curr_sample1, curr_sample2)) /
-                samples_genes_union(curr_sample1, curr_sample2);
+                static_cast<double>(total_count_intersection(curr_sample1, curr_sample2)) /
+                total_count_union(curr_sample1, curr_sample2);
         }
     }
 
